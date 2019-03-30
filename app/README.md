@@ -18,6 +18,7 @@ Then put the API Key under
 
 - `app/android/app/src/main/res/values/strings.xml`
 - `app/lib/api_key.dart` 
+- `app/ios/Runner/AppDelegate.m`
 
 ## Getting Started
 
