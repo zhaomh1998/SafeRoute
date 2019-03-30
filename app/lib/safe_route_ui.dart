@@ -120,21 +120,6 @@ class MapUiBodyState extends State<MapUiBody> {
     );
   }
 
-  Widget _zoomBoundsToggler() {
-    return FlatButton(
-      child: Text(_minMaxZoomPreference.minZoom == null
-          ? 'bound zoom'
-          : 'release zoom'),
-      onPressed: () {
-        setState(() {
-          _minMaxZoomPreference = _minMaxZoomPreference.minZoom == null
-              ? const MinMaxZoomPreference(12.0, 16.0)
-              : MinMaxZoomPreference.unbounded;
-        });
-      },
-    );
-  }
-
   Widget _mapTypeCycler() {
     final MapType nextType =
         MapType.values[(_mapType.index + 1) % MapType.values.length];
@@ -143,73 +128,6 @@ class MapUiBodyState extends State<MapUiBody> {
       onPressed: () {
         setState(() {
           _mapType = nextType;
-        });
-      },
-    );
-  }
-
-  Widget _rotateToggler() {
-    return FlatButton(
-      child: Text('${_rotateGesturesEnabled ? 'disable' : 'enable'} rotate'),
-      onPressed: () {
-        setState(() {
-          _rotateGesturesEnabled = !_rotateGesturesEnabled;
-        });
-      },
-    );
-  }
-
-  Widget _scrollToggler() {
-    return FlatButton(
-      child: Text('${_scrollGesturesEnabled ? 'disable' : 'enable'} scroll'),
-      onPressed: () {
-        setState(() {
-          _scrollGesturesEnabled = !_scrollGesturesEnabled;
-        });
-      },
-    );
-  }
-
-  Widget _tiltToggler() {
-    return FlatButton(
-      child: Text('${_tiltGesturesEnabled ? 'disable' : 'enable'} tilt'),
-      onPressed: () {
-        setState(() {
-          _tiltGesturesEnabled = !_tiltGesturesEnabled;
-        });
-      },
-    );
-  }
-
-  Widget _zoomToggler() {
-    return FlatButton(
-      child: Text('${_zoomGesturesEnabled ? 'disable' : 'enable'} zoom'),
-      onPressed: () {
-        setState(() {
-          _zoomGesturesEnabled = !_zoomGesturesEnabled;
-        });
-      },
-    );
-  }
-
-  Widget _myLocationToggler() {
-    return FlatButton(
-      child: Text('${_myLocationEnabled ? 'disable' : 'enable'} my location'),
-      onPressed: () {
-        setState(() {
-          _myLocationEnabled = !_myLocationEnabled;
-        });
-      },
-    );
-  }
-
-  Widget _myLocationButtonToggler() {
-    return FlatButton(
-      child: Text(
-          '${_myLocationButtonEnabled ? 'disable' : 'enable'} my location button'),
-      onPressed: () {
-        setState(() {
-          _myLocationButtonEnabled = !_myLocationButtonEnabled;
         });
       },
     );
@@ -233,50 +151,53 @@ class MapUiBodyState extends State<MapUiBody> {
         myLocationButtonEnabled: _myLocationButtonEnabled);
 
     final List<Widget> columnChildren = <Widget>[
-      Padding(
-        padding: const EdgeInsets.all(10.0),
-        child: Center(
-          child: SizedBox(
-            width: 300.0,
-            height: 200.0,
+//      Padding(
+//        padding: const EdgeInsets.all(10.0),
+//        child:
+//      ),
+      Center(
+          child: Stack(
+        children: <Widget>[
+          SizedBox(
+            width: 500.0,
+            height: 500.0,
             child: googleMap,
           ),
-        ),
-      ),
+          Padding(
+              padding: const EdgeInsets.all(30.0),
+              child: Center(
+                  child: Container(
+                      width: 350.0,
+                      height: 60.0,
+//                      margin: new EdgeInsets.all(10.0),
+                      decoration: new BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.all(
+                          const Radius.circular(15.0),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black,
+                            blurRadius: 5.0,
+                            // has the effect of softening the shadow
+                            spreadRadius: 0.5,
+                            // has the effect of extending the shadow
+//                            offset: Offset(
+//                              10.0, // horizontal, move right 10
+//                              10.0, // vertical, move down 10
+//                            ),
+                          )
+                        ],
+//                        borderRadius: new BorderRadius.all(),
+//                        gradient: new LinearGradient(...),
+                      ),
+                      child: TextField())))
+        ],
+      )),
     ];
 
     if (mapController != null) {
-      columnChildren.add(
-        Expanded(
-          child: ListView(
-            children: <Widget>[
-              Text('camera bearing: ${_position.bearing}'),
-              Text(
-                  'camera target: ${_position.target.latitude.toStringAsFixed(4)},'
-                  '${_position.target.longitude.toStringAsFixed(4)}'),
-              Text('camera zoom: ${_position.zoom}'),
-              Text('camera tilt: ${_position.tilt}'),
-              Text('location button clicked: $_locationButton'),
-              Text(
-                  'my location tapped: ${_tappedLocation.latitude} ${_tappedLocation.longitude}'),
-              Text('map tapped: ${_tapped.latitude} ${_tapped.longitude}'),
-              Text(
-                  'map long tapped: ${_tappedLong.latitude} ${_tappedLong.longitude}'),
-              Text(_isMoving ? '(Camera moving)' : '(Camera idle)'),
-              _compassToggler(),
-              _latLngBoundsToggler(),
-              _mapTypeCycler(),
-              _zoomBoundsToggler(),
-              _rotateToggler(),
-              _scrollToggler(),
-              _tiltToggler(),
-              _zoomToggler(),
-              _myLocationToggler(),
-              _myLocationButtonToggler(),
-            ],
-          ),
-        ),
-      );
+      columnChildren.add(Text("Reserved space..."));
     }
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
