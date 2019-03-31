@@ -16,6 +16,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
+LatLng origin = LatLng(0, 0);
+LatLng destination = LatLng(0, 0);
 
 final LatLngBounds laBounds = LatLngBounds(
   southwest: const LatLng(34.136, -118.665),
@@ -63,6 +65,7 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tapped = const LatLng(0, 0);
   LatLng _tappedLong = const LatLng(0, 0);
   LatLng _tappedLocation = const LatLng(0, 0);
+  bool _locationReady = false;
 
   final homeScaffoldKey = GlobalKey<ScaffoldState>();
   List<PlacesSearchResult> places = [];
@@ -90,6 +93,9 @@ class MapUiBodyState extends State<MapUiBody> {
 
   void _onMapLongTapped(LatLng location) {
     _tappedLong = location;
+    destination = location;
+    print(
+        'Setting destination to ${destination.longitude},${destination.latitude}');
   }
 
   void _onMapTapped(LatLng location) {
@@ -137,6 +143,7 @@ class MapUiBodyState extends State<MapUiBody> {
 
   void refresh() async {
     final center = await getUserLocation();
+    origin = center;
 
     mapController.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
         target: center == null ? LatLng(0, 0) : center, zoom: 15.0)));
@@ -302,7 +309,7 @@ class MapUiBodyState extends State<MapUiBody> {
     if (mapController != null) {
       columnChildren.add(Text("Reserved space..."));
       columnChildren.add(MaterialButton(
-        onPressed: fbTest,
+        onPressed: getDirection,
         child: Icon(Icons.send),
       ));
     }
@@ -324,19 +331,30 @@ class MapUiBodyState extends State<MapUiBody> {
       _myLocationButtonEnabled = false;
     });
   }
+
+  Widget responseList() {
+    if (_locationReady) {
+      // TODO: Render decoded polylines
+      // TODO: Send path points to FB, awaith response, update polylines and safety score on widget
+      return Text("This is decoded result direction list");
+    } else
+      return null;
+  }
 }
 
 // API Calls
-class Post {
+class DirectionResponse {
   final int userId;
   final int id;
   final String title;
   final String body;
 
-  Post({this.userId, this.id, this.title, this.body});
+  DirectionResponse({this.userId, this.id, this.title, this.body});
 
-  factory Post.fromJson(Map<String, dynamic> json) {
-    return Post(
+  factory DirectionResponse.fromJson(Map<String, dynamic> json) {
+    print('Decoded:');
+    print(json['body'].toString());
+    return DirectionResponse(
       userId: json['userId'],
       id: json['id'],
       title: json['title'],
@@ -346,8 +364,8 @@ class Post {
 }
 
 Future<void> fbTest() async {
-  final response =
-  await http.get('https://us-central1-saferoute-d749c.cloudfunctions.net/helloWorld');
+  final response = await http
+      .get('https://us-central1-saferoute-d749c.cloudfunctions.net/helloWorld');
 
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
@@ -358,15 +376,57 @@ Future<void> fbTest() async {
   }
 }
 
-Future<Post> fetchPost() async {
-  final response =
-  await http.get('https://jsonplaceholder.typicode.com/posts/1');
+Future<DirectionResponse> getDirection() async {
+  if (origin.longitude != 0 &&
+      origin.latitude != 0 &&
+      destination.longitude != 0 &&
+      destination.latitude != 0)
+    return await fetchDirections(origin, destination);
+  return null;
+}
+
+Future<DirectionResponse> fetchDirections(LatLng origin, LatLng dest) async {
+  var request_url = 'https://maps.googleapis.com/maps/api/directions/json?' +
+      'origin=${origin.latitude},${origin.longitude}&' +
+      'destination=${dest.latitude},${dest.longitude}&' +
+      'mode=walking&alternatives=true&key=${api_key.kGoogleApiKey}';
+  final response = await http.get(request_url);
 
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
-    return Post.fromJson(json.decode(response.body));
+    print(json.decode(response.body));
+    return DirectionResponse.fromJson(json.decode(response.body));
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
   }
+}
+
+// Author: RaimundWege https://github.com/johnpryan/flutter_map/issues/91
+List<LatLng> decodePolyline(String encoded) {
+  List<LatLng> points = new List<LatLng>();
+  int index = 0, len = encoded.length;
+  int lat = 0, lng = 0;
+  while (index < len) {
+    int b, shift = 0, result = 0;
+    do {
+      b = encoded.codeUnitAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.codeUnitAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+    LatLng p = new LatLng(lat / 1E5, lng / 1E5);
+    points.add(p);
+  }
+  return points;
 }
