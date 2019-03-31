@@ -24,6 +24,7 @@ DirectionResponse pathResponse;
 List<Polyline> existingPolylines = [];
 List<Marker> existingMarkers = [];
 Marker existingOriginMarker;
+double markerSafetyScore = -1;
 
 final LatLngBounds laBounds = LatLngBounds(
   southwest: const LatLng(34.105999, -118.465381),
@@ -76,6 +77,7 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tappedLocation = const LatLng(0, 0);
   bool _locationReady = false;
   bool _readyToNavigate = false;
+  bool _safetyScoreQuery = false;
 
   final homeScaffoldKey = GlobalKey<ScaffoldState>();
   List<PlacesSearchResult> places = [];
@@ -118,7 +120,9 @@ class MapUiBodyState extends State<MapUiBody> {
     if (isDestination) {
       destination = location;
       _addMarker(location);
-      getRiskScore(location);
+      setState(() {
+        _safetyScoreQuery = true;
+      });
     }
     else
       _addOrigin(location);
@@ -393,7 +397,7 @@ class MapUiBodyState extends State<MapUiBody> {
               Padding(padding: EdgeInsets.all(10.0), child: SizedBox(
                 height: deviceHeight / 15,
                 width: deviceWidth * 0.6,
-                child: Text("hi"),
+                child: buildSafetyCard()
               )),
               // Navigate Button
               Padding(
@@ -480,7 +484,23 @@ class MapUiBodyState extends State<MapUiBody> {
     } else
       return Text("");
   }
-
+  Widget buildSafetyCard() {
+    if (_safetyScoreQuery) {
+      // Get safety score
+      _safetyScoreQuery = false;
+      return FutureBuilder<void>(
+        future: getRiskScore(destination),
+        builder: (context, snapshot) {
+          if(snapshot.hasData)
+            return constructSafetyCard(false);
+          else if(snapshot.hasError)
+            return Text("${snapshot.error}");
+          return constructSafetyCard(true);
+        }
+      );
+    } else
+      return Text("");
+  }
   Widget constructDirectionCard(bool isWaiting) {
     var nCards = pathResponse.routes.length;
     List<Widget> listOfCards = [];
@@ -525,6 +545,39 @@ class MapUiBodyState extends State<MapUiBody> {
         shrinkWrap: true,
         children: listOfCards);
   }
+  Widget constructSafetyCard(bool isWaiting) {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.symmetric(
+          horizontal: deviceWidth / 200, vertical: deviceHeight / 300),
+      child: Container(
+        height: deviceHeight / 12,
+        decoration: BoxDecoration(
+            color: Color.fromRGBO(212, 216, 223, 0.8)),
+        child: ListTile(
+            contentPadding: EdgeInsets.symmetric(
+                horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
+            leading: Container(
+              padding: EdgeInsets.only(right: 20.0),
+              decoration: new BoxDecoration(
+                  border: new Border(
+                      right:
+                      new BorderSide(width: 1.0, color: Colors.white24))),
+              child: Icon(Icons.pin_drop, color: Colors.white),
+            ),
+            title: Text(markerSafetyScore.toString(), style: TextStyle(color: Colors.white)),
+            subtitle: Row(
+              children: <Widget>[
+                Text("-2 is no data, -1....skjfnsdkjgbdsf")
+              ],
+            ),
+            trailing: Text(isWaiting? "Loading Safety Data..." : "Safe??ChangeME!",
+              style: TextStyle(
+                  color: Colors.black45, fontWeight: FontWeight.bold),
+            ),),
+      ),
+    );
+  }
   Future<void> navigateProcedure() async {
     if (origin.longitude != 0 &&
         origin.latitude != 0 &&
@@ -549,7 +602,6 @@ class MapUiBodyState extends State<MapUiBody> {
     }
     return null;
   }
-
 }
 
 
@@ -612,6 +664,14 @@ Future<DirectionResponse> getGMapDirection(LatLng origin, LatLng dest) async {
 }
 
 Future<void> getRiskScore(LatLng location) async {
+  // If location out of LA bound, return -2 denoting no data
+  if(location.latitude < 34.016907 || location.latitude > 34.105999
+  || location.longitude < -118.465381 || -118.138795 > -118.138795) {
+    print("Dropped pin out of bound for LA. No Data available currently.");
+    markerSafetyScore = -2;
+    return;
+  }
+
   var now = new DateTime.now();
   final response = await http.get(
       'https://saferoute-d749c.appspot.com//riskScore?hour=${now.hour}&' +
@@ -619,7 +679,9 @@ Future<void> getRiskScore(LatLng location) async {
 
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
-    print("RiskScore=${json.decode(response.body)['score']}");
+    var score = json.decode(response.body)['score'];
+    print("RiskScore=${score}");
+    markerSafetyScore = score.toDouble();
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
