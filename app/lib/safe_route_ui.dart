@@ -49,7 +49,7 @@ class MapUiBodyState extends State<MapUiBody> {
   double deviceWidth;
   double deviceHeight;
   double mapHeight;
-  double mapScalingFactor = 0.9;
+  double mapScalingFactor = 0.7;
   GoogleMapController mapController;
   CameraPosition _position = _kInitialPosition;
   bool _isMoving = false;
@@ -327,9 +327,63 @@ class MapUiBodyState extends State<MapUiBody> {
             mapScalingFactor = 0.6;
           });
           getDirection();
-
         },
-        child: Icon(Icons.navigation),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: <Widget>[
+            Padding(padding: EdgeInsets.all(10.0), child: Text("Info!")),
+            Expanded(
+                child: Padding(
+                    // Search bar
+                    padding: const EdgeInsets.all(12.0),
+                    child: Center(
+                        child: Container(
+                            padding: const EdgeInsets.all(0.1),
+                            width: 350.0,
+                            height: 50.0,
+                            decoration: new BoxDecoration(
+                              color: Color.fromARGB(255, 58, 120, 231),
+                              borderRadius: BorderRadius.all(
+                                const Radius.circular(30.0),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.grey.withOpacity(0.8),
+                                  blurRadius: 3,
+                                  // has the effect of softening the shadow
+                                  spreadRadius: 0.25,
+                                  // has the effect of extending the shadow
+                                  offset: Offset(
+                                    0.5, // horizontal, move right 10
+                                    0.5, // vertical, move down 10
+                                  ),
+                                )
+                              ],
+                            ),
+                            child: InkWell(
+                                onTap: getDirection,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: <Widget>[
+                                    Icon(
+                                      Icons.navigation,
+                                      size: 25.0,
+                                      color: Colors.white,
+                                    ),
+                                    Expanded(
+                                      child: Container(
+//                              padding: EdgeInsets.all(24.0),
+                                        child: Text(
+                                          "Navigate",
+                                          style: TextStyle(color: Colors.white),
+                                          textAlign: TextAlign.start,
+                                        ),
+                                      ),
+                                    )
+                                  ],
+                                ))))))
+          ],
+        ),
       ));
     }
     return Scaffold(
@@ -453,7 +507,7 @@ class MapUiBodyState extends State<MapUiBody> {
   }
 }
 
-// API Calls 
+// API Calls
 class Route {
   final List<LatLng> waypoints;
   final String polyLineStr;
