@@ -40,6 +40,7 @@ class MapUiBody extends StatefulWidget {
 }
 
 class MapUiBodyState extends State<MapUiBody> {
+  // Init config
   MapUiBodyState();
 
   static final CameraPosition _kInitialPosition = const CameraPosition(
@@ -49,7 +50,7 @@ class MapUiBodyState extends State<MapUiBody> {
   double deviceWidth;
   double deviceHeight;
   double mapHeight;
-  double mapScalingFactor = 0.7;
+  double mapScalingFactor = 0.87;
   GoogleMapController mapController;
   CameraPosition _position = _kInitialPosition;
   bool _isMoving = false;
@@ -82,6 +83,7 @@ class MapUiBodyState extends State<MapUiBody> {
   }
 
 
+  // Map Callbacks -------------------------------------------------------------
   void _onMapLongTapped(LatLng location) {
     _tappedLong = location;
     destination = location;
@@ -90,21 +92,12 @@ class MapUiBodyState extends State<MapUiBody> {
     _addMarker(location);
     getRiskScore(location);
   }
-
   void _onMapTapped(LatLng location) {
     _tapped = location;
   }
-
-  @override
-  void dispose() {
-//    mapController.removeListener(_onMapChanged);
-    super.dispose();
-  }
-
-
   Widget _mapTypeCycler() {
     final MapType nextType =
-        MapType.values[(_mapType.index + 1) % MapType.values.length];
+    MapType.values[(_mapType.index + 1) % MapType.values.length];
     return FlatButton(
       child: Text('change map type to $nextType'),
       onPressed: () {
@@ -114,7 +107,35 @@ class MapUiBodyState extends State<MapUiBody> {
       },
     );
   }
+  void onError(PlacesAutocompleteResponse response) {
+    homeScaffoldKey.currentState.showSnackBar(
+      SnackBar(content: Text(response.errorMessage)),
+    );
+  }
 
+  // Map Helpers----------------------------------------------------------------
+  void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) {
+    mapController.addPolyline(PolylineOptions(
+        points: waypts,
+        color: Colors.blue.withOpacity(0.8).value,
+        width: 20,
+        visible: true));
+    if (readjustView) {
+      var origLoc = LatLng(waypts[0].latitude, waypts[0].longitude);
+      var newLoc = LatLng(waypts[waypts.length - 1].latitude,
+          waypts[waypts.length - 1].longitude);
+      var swLoc = LatLng(min(origLoc.latitude, newLoc.latitude),
+          min(origLoc.longitude, newLoc.longitude));
+      var neLoc = LatLng(max(origLoc.latitude, newLoc.latitude),
+          max(origLoc.longitude, newLoc.longitude));
+      mapController.moveCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(southwest: swLoc, northeast: neLoc),
+          50.0,
+        ),
+      );
+    }
+  }
   void refresh() async {
     final center = await getUserLocation();
     origin = center;
@@ -122,7 +143,6 @@ class MapUiBodyState extends State<MapUiBody> {
     mapController.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
         target: center == null ? LatLng(0, 0) : center, zoom: 15.0)));
   }
-
   Future<LatLng> getUserLocation() async {
     LocationManager.LocationData currentLocation;
     var location = new LocationManager.Location();
@@ -137,30 +157,6 @@ class MapUiBodyState extends State<MapUiBody> {
       return null;
     }
   }
-
-  void onError(PlacesAutocompleteResponse response) {
-    homeScaffoldKey.currentState.showSnackBar(
-      SnackBar(content: Text(response.errorMessage)),
-    );
-  }
-
-  Future<void> _handleSearch() async {
-    LatLng targetLocation = await _searchLocation();
-    if (targetLocation != null) {
-      _addMarker(targetLocation);
-    }
-  }
-
-  void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) {
-    final markerOptions = MarkerOptions(
-        position: location,
-        infoWindowText:
-            InfoWindowText("${location.latitude}", "${location.longitude}"));
-    mapController.addMarker(markerOptions);
-    mapController.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(target: location, zoom: 15.0)));
-  }
-
   Future<LatLng> _searchLocation() async {
     try {
       final center = await getUserLocation();
@@ -178,7 +174,7 @@ class MapUiBodyState extends State<MapUiBody> {
 
 //      print(_places.getDetailsByPlaceId(p.placeId));
       PlacesDetailsResponse chosenPlace =
-          await _places.getDetailsByPlaceId(p.placeId);
+      await _places.getDetailsByPlaceId(p.placeId);
       var chosenLocation = chosenPlace.result.geometry.location;
       return LatLng(chosenLocation.lat, chosenLocation.lng);
 //      showDetailPlace(p.placeId);
@@ -186,10 +182,29 @@ class MapUiBodyState extends State<MapUiBody> {
       return null;
     }
   }
-
-  void _searchBarBtnHandle() {
-    print("SearchBarBtnHandle!!");
+  Future<void> _handleSearch() async {
+    LatLng targetLocation = await _searchLocation();
+    if (targetLocation != null) {
+      _addMarker(targetLocation);
+    }
   }
+  void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) {
+    final markerOptions = MarkerOptions(
+        position: location,
+        infoWindowText:
+        InfoWindowText("${location.latitude}", "${location.longitude}"));
+    mapController.addMarker(markerOptions);
+    mapController.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: location, zoom: 15.0)));
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+
+  // Widget Builders------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIOverlays([]);
@@ -223,7 +238,6 @@ class MapUiBodyState extends State<MapUiBody> {
       ),
     );
   }
-
   Widget buildMap(GoogleMap googleMap, BuildContext context) {
     return Center(
         child: Stack(
@@ -259,7 +273,7 @@ class MapUiBodyState extends State<MapUiBody> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: <Widget>[
                         MaterialButton(
-                          onPressed: () => _searchBarBtnHandle,
+                          onPressed: () => print("SearchBarBtnPressed!"),
                           child: Icon(
                             Icons.dehaze,
                             size: 25.0,
@@ -284,7 +298,6 @@ class MapUiBodyState extends State<MapUiBody> {
       ],
     ));
   }
-
   Widget buildBottomBar() {
     return Column(
         children: <Widget>[
@@ -352,7 +365,6 @@ class MapUiBodyState extends State<MapUiBody> {
         ]
     );
   }
-
   void onMapCreated(GoogleMapController controller) {
     mapController = controller;
 //    mapController.addListener(_onMapChanged);  // For moving map and get new cam location // Don't forget to remove this listened in dispose!
@@ -364,7 +376,6 @@ class MapUiBodyState extends State<MapUiBody> {
       _myLocationButtonEnabled = false;
     });
   }
-
   Widget buildMiddleBar() {
     if (_locationReady) {
       // TODO: Render decoded polylines
@@ -373,7 +384,6 @@ class MapUiBodyState extends State<MapUiBody> {
     } else
       return Text("");
   }
-
   Widget constructDirectionCard(DirectionResponse directionResp) {
     var nCards = directionResp.routes.length;
     List<Widget> listOfCards = [];
@@ -418,7 +428,6 @@ class MapUiBodyState extends State<MapUiBody> {
         shrinkWrap: true,
         children: listOfCards);
   }
-
   Future<DirectionResponse> navigateProcedure() async {
     if (origin.longitude != 0 &&
         origin.latitude != 0 &&
@@ -445,32 +454,10 @@ class MapUiBodyState extends State<MapUiBody> {
     return null;
   }
 
-  void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) {
-    mapController.addPolyline(PolylineOptions(
-        points: waypts,
-        color: Colors.blue.withOpacity(0.8).value,
-        width: 20,
-        visible: true));
-    if (readjustView) {
-      var origLoc = LatLng(waypts[0].latitude, waypts[0].longitude);
-      var newLoc = LatLng(waypts[waypts.length - 1].latitude,
-          waypts[waypts.length - 1].longitude);
-      var swLoc = LatLng(min(origLoc.latitude, newLoc.latitude),
-          min(origLoc.longitude, newLoc.longitude));
-      var neLoc = LatLng(max(origLoc.latitude, newLoc.latitude),
-          max(origLoc.longitude, newLoc.longitude));
-      mapController.moveCamera(
-        CameraUpdate.newLatLngBounds(
-          LatLngBounds(southwest: swLoc, northeast: neLoc),
-          50.0,
-        ),
-      );
-    }
-  }
 }
 
-// API Stuff
 
+// API Stuff -------------------------------------------------------------------
 // API Response Factories
 class Route {
   final List<LatLng> waypoints;
