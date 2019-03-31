@@ -4,12 +4,17 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-
+import 'package:google_maps_webservice/places.dart';
+import 'package:flutter_google_places/flutter_google_places.dart';
+import 'package:location/location.dart' as LocationManager;
+import 'api_key.dart' as api_key;
 import 'page.dart';
 
-final LatLngBounds sydneyBounds = LatLngBounds(
-  southwest: const LatLng(-34.022631, 150.620685),
-  northeast: const LatLng(-33.571835, 151.325952),
+GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
+
+final LatLngBounds laBounds = LatLngBounds(
+  southwest: const LatLng(34.136, -118.665),
+  northeast: const LatLng(33.728, -117.785),
 );
 
 class MapUiPage extends Page {
@@ -32,7 +37,7 @@ class MapUiBodyState extends State<MapUiBody> {
   MapUiBodyState();
 
   static final CameraPosition _kInitialPosition = const CameraPosition(
-    target: LatLng(-33.852, 151.211),
+    target: LatLng(34.0522, -118.2437),
     zoom: 11.0,
   );
 
@@ -53,6 +58,11 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tapped = const LatLng(0, 0);
   LatLng _tappedLong = const LatLng(0, 0);
   LatLng _tappedLocation = const LatLng(0, 0);
+
+  final homeScaffoldKey = GlobalKey<ScaffoldState>();
+  List<PlacesSearchResult> places = [];
+  bool isLoading = false;
+  String errorMessage;
 
   @override
   void initState() {
@@ -113,7 +123,7 @@ class MapUiBodyState extends State<MapUiBody> {
       onPressed: () {
         setState(() {
           _cameraTargetBounds = _cameraTargetBounds.bounds == null
-              ? CameraTargetBounds(sydneyBounds)
+              ? CameraTargetBounds(laBounds)
               : CameraTargetBounds.unbounded;
         });
       },
@@ -131,6 +141,76 @@ class MapUiBodyState extends State<MapUiBody> {
         });
       },
     );
+  }
+
+  void refresh() async {
+    final center = await getUserLocation();
+
+    mapController.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
+        target: center == null ? LatLng(0, 0) : center, zoom: 15.0)));
+//    getNearbyPlaces(center);
+  }
+
+  Future<LatLng> getUserLocation() async {
+    LocationManager.LocationData currentLocation;
+    var location = new LocationManager.Location();
+    try {
+      currentLocation = await location.getLocation();
+      final lat = currentLocation.latitude;
+      final lng = currentLocation.longitude;
+      final center = LatLng(lat, lng);
+      return center;
+    } on Exception {
+      currentLocation = null;
+      return null;
+    }
+  }
+
+  void onError(PlacesAutocompleteResponse response) {
+    homeScaffoldKey.currentState.showSnackBar(
+      SnackBar(content: Text(response.errorMessage)),
+    );
+  }
+
+  Future<void> _handlePressButton() async {
+    LatLng targetLocation = await _searchLocation();
+    print(
+        "${targetLocation.latitude.toString()}, ${targetLocation.longitude.toString()}");
+    if (targetLocation != null) {
+      final markerOptions = MarkerOptions(
+          position: targetLocation,
+          infoWindowText: InfoWindowText(
+              "${targetLocation.latitude}", "${targetLocation.longitude}"));
+      mapController.addMarker(markerOptions);
+      mapController.animateCamera(CameraUpdate.newCameraPosition(
+          CameraPosition(target: targetLocation, zoom: 15.0)));
+    }
+  }
+
+  Future<LatLng> _searchLocation() async {
+    try {
+      final center = await getUserLocation();
+      Prediction p = await PlacesAutocomplete.show(
+          context: context,
+          strictbounds: false,
+          apiKey: api_key.kGoogleApiKey,
+          onError: onError,
+          mode: Mode.fullscreen,
+          language: "en",
+          location: center == null
+              ? null
+              : Location(center.latitude, center.longitude),
+          radius: center == null ? null : 10000);
+
+//      print(_places.getDetailsByPlaceId(p.placeId));
+      PlacesDetailsResponse chosenPlace =
+          await _places.getDetailsByPlaceId(p.placeId);
+      var chosenLocation = chosenPlace.result.geometry.location;
+      return LatLng(chosenLocation.lat, chosenLocation.lng);
+//      showDetailPlace(p.placeId);
+    } catch (e) {
+      return null;
+    }
   }
 
   @override
@@ -164,34 +244,54 @@ class MapUiBodyState extends State<MapUiBody> {
             child: googleMap,
           ),
           Padding(
-              padding: const EdgeInsets.all(30.0),
+              // Search bar
+              padding: const EdgeInsets.all(20.0),
               child: Center(
                   child: Container(
+                      padding: const EdgeInsets.all(20.0),
                       width: 350.0,
                       height: 60.0,
-//                      margin: new EdgeInsets.all(10.0),
                       decoration: new BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.all(
-                          const Radius.circular(15.0),
+                          const Radius.circular(10.0),
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black,
-                            blurRadius: 5.0,
+                            color: Colors.grey,
+                            blurRadius: 2,
                             // has the effect of softening the shadow
-                            spreadRadius: 0.5,
+                            spreadRadius: 0.25,
                             // has the effect of extending the shadow
-//                            offset: Offset(
-//                              10.0, // horizontal, move right 10
-//                              10.0, // vertical, move down 10
-//                            ),
+                            offset: Offset(
+                              0.5, // horizontal, move right 10
+                              0.5, // vertical, move down 10
+                            ),
                           )
                         ],
 //                        borderRadius: new BorderRadius.all(),
 //                        gradient: new LinearGradient(...),
                       ),
-                      child: TextField())))
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: <Widget>[
+                          MaterialButton(
+                            onPressed: () => print("Hello"),
+                            child: Icon(Icons.dehaze),
+                          ),
+                          InkWell(
+                            onTap: _handlePressButton,
+                            child: Container(
+                              color: Colors.grey,
+//                              padding: EdgeInsets.all(24.0),
+                              child: Text(
+                                "Fukuuuu",
+                                textAlign: TextAlign.start,
+                              ),
+                            ),
+                          )
+                        ],
+                      ))))
         ],
       )),
     ];
@@ -215,6 +315,7 @@ class MapUiBodyState extends State<MapUiBody> {
     mapController.onLocationClick.add(_onLocationClick);
     mapController.onMapLongTapped.add(_onMapLongTapped);
     _extractMapInfo();
+    refresh();
     setState(() {});
   }
 }
