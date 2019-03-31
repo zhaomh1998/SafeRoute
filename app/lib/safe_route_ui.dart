@@ -8,6 +8,9 @@ import 'page.dart';
 import 'dart:math';
 import 'package:flutter/services.dart';
 import 'drawer.dart';
+import 'package:android_intent/android_intent.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io' show Platform;
 
 // API Call stuff
 import 'dart:async';
@@ -17,6 +20,7 @@ import 'package:http/http.dart' as http;
 GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
 LatLng origin = LatLng(0, 0);
 LatLng destination = LatLng(0, 0);
+DirectionResponse pathResponse;
 
 final LatLngBounds laBounds = LatLngBounds(
   southwest: const LatLng(34.105999, -118.465381),
@@ -70,7 +74,6 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tappedLocation = const LatLng(0, 0);
   bool _locationReady = false;
   bool _readyToNavigate = false;
-  DirectionResponse pathResponse;
 
   final homeScaffoldKey = GlobalKey<ScaffoldState>();
   List<PlacesSearchResult> places = [];
@@ -197,7 +200,27 @@ class MapUiBodyState extends State<MapUiBody> {
     mapController.animateCamera(CameraUpdate.newCameraPosition(
         CameraPosition(target: location, zoom: 15.0)));
   }
-
+  void _launchGMap(LatLng originLocation, LatLng destinationLocation) async {
+    String origin="${originLocation.latitude},${originLocation.longitude}";  // lat,long like 123.34,68.56
+    String destination="${destinationLocation.latitude},${destinationLocation.longitude}";
+    if (Platform.isAndroid) {
+      final AndroidIntent intent = new AndroidIntent(
+          action: 'action_view',
+          data: Uri.encodeFull(
+              "https://www.google.com/maps/dir/?api=1&origin=" +
+                  origin + "&destination=" + destination + "&travelmode=walking&dir_action=navigate"),
+          package: 'com.google.android.apps.maps');
+      intent.launch();
+    }
+    else {
+      String url = "https://www.google.com/maps/dir/?api=1&origin=" + origin + "&destination=" + destination + "&travelmode=walking&dir_action=navigate";
+      if (await canLaunch(url)) {
+        await launch(url);
+      } else {
+        throw 'Could not launch $url';
+      }
+    }
+  } // TODO: add biking mode
   @override
   void dispose() {
     super.dispose();
@@ -301,7 +324,7 @@ class MapUiBodyState extends State<MapUiBody> {
   Widget buildBottomBar() {
     return Column(
         children: <Widget>[
-          buildMiddleBar(),
+          buildMiddleCards(),
           Row(
             // Navigate Button
             mainAxisAlignment: MainAxisAlignment.end,
@@ -342,7 +365,10 @@ class MapUiBodyState extends State<MapUiBody> {
                             setState(() {
                               mapScalingFactor = 0.6;
                               _readyToNavigate = !_readyToNavigate;
-                              navigateProcedure();
+                              if(_readyToNavigate)
+                                navigateProcedure();
+                              else
+                                _launchGMap(origin, destination);
                             });
                           },
                           child: Row(
@@ -376,16 +402,28 @@ class MapUiBodyState extends State<MapUiBody> {
       _myLocationButtonEnabled = false;
     });
   }
-  Widget buildMiddleBar() {
+  Widget buildMiddleCards() {
     if (_locationReady) {
       // TODO: Render decoded polylines
-      // TODO: Send path points to FB, await response, update polylines and safety score on widget
-      return constructDirectionCard(pathResponse);
+      // TODO: Send path points to GCP backend, await response, update polylines and safety score on widget
+      _locationReady = false;
+      return FutureBuilder<DirectionResponse>(
+        future: getPathScore(),
+        builder: (context, snapshot) {
+          if(snapshot.hasData)
+            return constructDirectionCard(false);
+          else if(snapshot.hasError)
+            return Text("${snapshot.error}");
+          return constructDirectionCard(true);
+        },
+      );
+//      return constructDirectionCard(pathResponse);
     } else
       return Text("");
   }
-  Widget constructDirectionCard(DirectionResponse directionResp) {
-    var nCards = directionResp.routes.length;
+
+  Widget constructDirectionCard(bool isWaiting) {
+    var nCards = pathResponse.routes.length;
     List<Widget> listOfCards = [];
 
     for (int i = 0; i < nCards; i++) {
@@ -396,7 +434,8 @@ class MapUiBodyState extends State<MapUiBody> {
             horizontal: deviceWidth / 30, vertical: deviceHeight / 120),
         child: Container(
           height: deviceHeight / 12,
-          decoration: BoxDecoration(color: Color.fromRGBO(212, 216, 223, 0.8)),
+          decoration: BoxDecoration(
+              color: Color.fromRGBO(212, 216, 223, 0.8)),
           child: ListTile(
               contentPadding: EdgeInsets.symmetric(
                   horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
@@ -405,20 +444,19 @@ class MapUiBodyState extends State<MapUiBody> {
                 decoration: new BoxDecoration(
                     border: new Border(
                         right:
-                            new BorderSide(width: 1.0, color: Colors.white24))),
+                        new BorderSide(width: 1.0, color: Colors.white24))),
                 child: Icon(Icons.trip_origin, color: Colors.white),
               ),
-              title: Text(
-                "Safe",
+              title: Text(isWaiting? "Loading Safety Data..." : pathResponse.routes[i].score.toString(),
                 style: TextStyle(
                     color: Colors.black45, fontWeight: FontWeight.bold),
               ),
               subtitle: Row(
                 children: <Widget>[
-                  Text("1.5 miles", style: TextStyle(color: Colors.white))
+                  Text(pathResponse.routes[i].distance, style: TextStyle(color: Colors.white))
                 ],
               ),
-              trailing: Text("6 mins")),
+              trailing: Text(pathResponse.routes[i].duration)),
         ),
       ));
     }
@@ -428,28 +466,27 @@ class MapUiBodyState extends State<MapUiBody> {
         shrinkWrap: true,
         children: listOfCards);
   }
-  Future<DirectionResponse> navigateProcedure() async {
+  Future<void> navigateProcedure() async {
     if (origin.longitude != 0 &&
         origin.latitude != 0 &&
         destination.longitude != 0 &&
         destination.latitude != 0) {
       // Step 1. Retrieve Directions
-      var decodedDirections = await getGMapDirection(origin, destination);
-      var routes = decodedDirections.routes;
+      pathResponse = await getGMapDirection(origin, destination);
+      var routes = pathResponse.routes;
       // Step 2. Draw Polyline
       for (int i = 0; i < routes.length; i++) {
         print(routes[i].polyLineStr);
         _draw_polyline(routes[i].waypoints);
       }
       setState(() {
-        pathResponse = decodedDirections;
+        pathResponse = pathResponse;
         _locationReady = true;
       });
-      // Step 3. Request from Database
-      getPathScore(decodedDirections);
+      // Step 3. Request from Database TODO, edit
+      getPathScore();
       // TODO
       // Step 4. Update UI
-      return decodedDirections;
     }
     return null;
   }
@@ -464,15 +501,18 @@ class Route {
   final String polyLineStr;
   final String duration;
   final String distance;
+  double score;
 
-  Route({this.waypoints, this.polyLineStr, this.duration, this.distance});
+  Route({this.waypoints, this.polyLineStr, this.duration, this.distance, this.score});
 
   factory Route.parseRoute(dynamic route) {
     return Route(
         waypoints: decodePolyline(route['overview_polyline']['points']),
         polyLineStr: route['overview_polyline']['points'],
         duration: route['legs'][0]['duration']['text'],
-        distance: route['legs'][0]['distance']['text']);
+        distance: route['legs'][0]['distance']['text'],
+        score: -1
+    );
   }
 }
 
@@ -527,10 +567,34 @@ Future<void> getRiskScore(LatLng location) async {
   }
 }
 
-Future<void> getPathScore(DirectionResponse paths) async {
+//Future<DirectionResponse> getPathScore(DirectionResponse paths) async {
+//  var now = new DateTime.now();
+//  List<String> polyLineStrs = [];
+//  paths.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
+//  String req = jsonEncode({"hour": now.hour, "polyline": polyLineStrs});
+//  print(req);
+//  final response = await http.post(
+//      'https://saferoute-d749c.appspot.com//pathRiskScore',
+//      body: req,
+//      headers: {'Content-Type': 'application/json; charset=UTF-8'});
+//  if (response.statusCode == 200) {
+//    // If the call to the server was successful, parse the JSON
+//    var responseDecode = json.decode(response.body);
+//    assert(responseDecode['data'].length == paths.routes.length);
+//    for(int i = 0; i > paths.routes.length; i++) {
+//      paths.routes[i].score = responseDecode.data[i];
+//    }
+//    return paths;
+//  } else {
+//    // If that call was not successful, throw an error.
+//    throw Exception('Failed to load post');
+//  }
+//}
+
+Future<DirectionResponse> getPathScore() async {
   var now = new DateTime.now();
   List<String> polyLineStrs = [];
-  paths.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
+  pathResponse.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
   String req = jsonEncode({"hour": now.hour, "polyline": polyLineStrs});
   print(req);
   final response = await http.post(
@@ -540,7 +604,11 @@ Future<void> getPathScore(DirectionResponse paths) async {
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
     var responseDecode = json.decode(response.body);
-    print(responseDecode);
+    assert(responseDecode['data'].length == pathResponse.routes.length);
+    for(int i = 0; i < pathResponse.routes.length; i++) {
+      pathResponse.routes[i].score = responseDecode['data'][i].toDouble();
+    }
+    return pathResponse;
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
