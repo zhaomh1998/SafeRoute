@@ -89,11 +89,7 @@ class MapUiBodyState extends State<MapUiBody> {
   // Map Callbacks -------------------------------------------------------------
   void _onMapLongTapped(LatLng location) {
     _tappedLong = location;
-    destination = location;
-    print(
-        'Setting destination to ${destination.longitude},${destination.latitude}');
-    _addMarker(location);
-    getRiskScore(location);
+    _onSelectedLocation(location, true);
   }
   void _onMapTapped(LatLng location) {
     _tapped = location;
@@ -115,6 +111,15 @@ class MapUiBodyState extends State<MapUiBody> {
       SnackBar(content: Text(response.errorMessage)),
     );
   }
+  void _onSelectedLocation(LatLng location, bool isDestination) async{
+    if(isDestination)
+      destination = location;
+    else
+      origin = location;
+    _addMarker(location);
+    getRiskScore(location);
+  }
+
 
   // Map Helpers----------------------------------------------------------------
   void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) {
@@ -188,7 +193,7 @@ class MapUiBodyState extends State<MapUiBody> {
   Future<void> _handleSearch() async {
     LatLng targetLocation = await _searchLocation();
     if (targetLocation != null) {
-      _addMarker(targetLocation);
+      _onSelectedLocation(targetLocation, true);
     }
   }
   void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) {
@@ -417,7 +422,6 @@ class MapUiBodyState extends State<MapUiBody> {
           return constructDirectionCard(true);
         },
       );
-//      return constructDirectionCard(pathResponse);
     } else
       return Text("");
   }
