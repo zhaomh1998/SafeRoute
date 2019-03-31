@@ -10,6 +10,11 @@ import 'package:location/location.dart' as LocationManager;
 import 'api_key.dart' as api_key;
 import 'page.dart';
 
+// API Call stuff
+import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
 
 final LatLngBounds laBounds = LatLngBounds(
@@ -69,11 +74,11 @@ class MapUiBodyState extends State<MapUiBody> {
     super.initState();
   }
 
-  void _onMapChanged() {
-    setState(() {
-      _extractMapInfo();
-    });
-  }
+//  void _onMapChanged() {
+//    setState(() {
+//      _extractMapInfo();
+//    });
+//  }
 
   void _onLocationClick(LatLng location) {
     _tappedLocation = location;
@@ -91,14 +96,14 @@ class MapUiBodyState extends State<MapUiBody> {
     _tapped = location;
   }
 
-  void _extractMapInfo() {
-    _position = mapController.cameraPosition;
-    _isMoving = mapController.isCameraMoving;
-  }
+//  void _extractMapInfo() {
+//    _position = mapController.cameraPosition;
+//    _isMoving = mapController.isCameraMoving;
+//  }
 
   @override
   void dispose() {
-    mapController.removeListener(_onMapChanged);
+//    mapController.removeListener(_onMapChanged);
     super.dispose();
   }
 
@@ -113,22 +118,9 @@ class MapUiBodyState extends State<MapUiBody> {
     );
   }
 
-  Widget _latLngBoundsToggler() {
-    return FlatButton(
-      child: Text(
-        _cameraTargetBounds.bounds == null
-            ? 'bound camera target'
-            : 'release camera target',
-      ),
-      onPressed: () {
-        setState(() {
-          _cameraTargetBounds = _cameraTargetBounds.bounds == null
-              ? CameraTargetBounds(laBounds)
-              : CameraTargetBounds.unbounded;
-        });
-      },
-    );
-  }
+//  Widget _drawerOpener() {
+//
+//  }
 
   Widget _mapTypeCycler() {
     final MapType nextType =
@@ -213,6 +205,18 @@ class MapUiBodyState extends State<MapUiBody> {
     }
   }
 
+  Widget _myLocationButtonToggler() {
+    return FlatButton(
+      child: Text(
+          '${_myLocationButtonEnabled ? 'disable' : 'enable'} my location button'),
+      onPressed: () {
+        setState(() {
+          _myLocationButtonEnabled = !_myLocationButtonEnabled;
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final GoogleMap googleMap = GoogleMap(
@@ -229,7 +233,6 @@ class MapUiBodyState extends State<MapUiBody> {
         zoomGesturesEnabled: _zoomGesturesEnabled,
         myLocationEnabled: _myLocationEnabled,
         myLocationButtonEnabled: _myLocationButtonEnabled);
-
     final List<Widget> columnChildren = <Widget>[
 //      Padding(
 //        padding: const EdgeInsets.all(10.0),
@@ -298,6 +301,10 @@ class MapUiBodyState extends State<MapUiBody> {
 
     if (mapController != null) {
       columnChildren.add(Text("Reserved space..."));
+      columnChildren.add(MaterialButton(
+        onPressed: fbTest,
+        child: Icon(Icons.send),
+      ));
     }
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
@@ -308,14 +315,58 @@ class MapUiBodyState extends State<MapUiBody> {
 
   void onMapCreated(GoogleMapController controller) {
     mapController = controller;
-    mapController.addListener(_onMapChanged);
+//    mapController.addListener(_onMapChanged);  // For moving map and get new cam location // Don't forget to remove this listened in dispose!
     mapController.onMapLongTapped.add(_onMapLongTapped);
     mapController.onMapTapped.add(_onMapTapped);
-    mapController.onLocationButtonClick.add(_onLocationButtonClick);
-    mapController.onLocationClick.add(_onLocationClick);
-    mapController.onMapLongTapped.add(_onMapLongTapped);
-    _extractMapInfo();
+//    _extractMapInfo();
     refresh();
-    setState(() {});
+    setState(() {
+      _myLocationButtonEnabled = false;
+    });
+  }
+}
+
+// API Calls
+class Post {
+  final int userId;
+  final int id;
+  final String title;
+  final String body;
+
+  Post({this.userId, this.id, this.title, this.body});
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(
+      userId: json['userId'],
+      id: json['id'],
+      title: json['title'],
+      body: json['body'],
+    );
+  }
+}
+
+Future<void> fbTest() async {
+  final response =
+  await http.get('https://us-central1-saferoute-d749c.cloudfunctions.net/helloWorld');
+
+  if (response.statusCode == 200) {
+    // If the call to the server was successful, parse the JSON
+    return print(json.decode(response.body));
+  } else {
+    // If that call was not successful, throw an error.
+    throw Exception('Failed to load post');
+  }
+}
+
+Future<Post> fetchPost() async {
+  final response =
+  await http.get('https://jsonplaceholder.typicode.com/posts/1');
+
+  if (response.statusCode == 200) {
+    // If the call to the server was successful, parse the JSON
+    return Post.fromJson(json.decode(response.body));
+  } else {
+    // If that call was not successful, throw an error.
+    throw Exception('Failed to load post');
   }
 }
