@@ -6,6 +6,8 @@ import 'package:location/location.dart' as LocationManager;
 import 'api_key.dart' as api_key;
 import 'page.dart';
 import 'dart:math';
+import 'package:flutter/services.dart';
+import 'drawer.dart';
 
 // API Call stuff
 import 'dart:async';
@@ -44,7 +46,10 @@ class MapUiBodyState extends State<MapUiBody> {
     target: LatLng(34.0522, -118.2437),
     zoom: 11.0,
   );
-
+  double deviceWidth;
+  double deviceHeight;
+  double mapHeight;
+  double mapScalingFactor = 0.9;
   GoogleMapController mapController;
   CameraPosition _position = _kInitialPosition;
   bool _isMoving = false;
@@ -63,6 +68,7 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tappedLong = const LatLng(0, 0);
   LatLng _tappedLocation = const LatLng(0, 0);
   bool _locationReady = false;
+  DirectionResponse pathResponse;
 
   final homeScaffoldKey = GlobalKey<ScaffoldState>();
   List<PlacesSearchResult> places = [];
@@ -169,10 +175,8 @@ class MapUiBodyState extends State<MapUiBody> {
     );
   }
 
-  Future<void> _handlePressButton() async {
+  Future<void> _handleSearch() async {
     LatLng targetLocation = await _searchLocation();
-    print(
-        "${targetLocation.latitude.toString()}, ${targetLocation.longitude.toString()}");
     if (targetLocation != null) {
       _addMarker(targetLocation);
     }
@@ -228,6 +232,9 @@ class MapUiBodyState extends State<MapUiBody> {
 
   @override
   Widget build(BuildContext context) {
+    SystemChrome.setEnabledSystemUIOverlays([]);
+    deviceWidth = MediaQuery.of(context).size.width;
+    deviceHeight = MediaQuery.of(context).size.height;
     final GoogleMap googleMap = GoogleMap(
         onMapCreated: onMapCreated,
         initialCameraPosition: _kInitialPosition,
@@ -251,8 +258,8 @@ class MapUiBodyState extends State<MapUiBody> {
           child: Stack(
         children: <Widget>[
           SizedBox(
-            width: 500.0,
-            height: 500.0,
+            width: deviceWidth,
+            height: deviceHeight * mapScalingFactor,
             child: googleMap,
           ),
           Padding(
@@ -281,14 +288,12 @@ class MapUiBodyState extends State<MapUiBody> {
                             ),
                           )
                         ],
-//                        borderRadius: new BorderRadius.all(),
-//                        gradient: new LinearGradient(...),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: <Widget>[
                           MaterialButton(
-                            onPressed: () => print("Hello"),
+                            onPressed: () => Scaffold.of(context).openDrawer(),
                             child: Icon(
                               Icons.dehaze,
                               size: 25.0,
@@ -298,7 +303,7 @@ class MapUiBodyState extends State<MapUiBody> {
                           ),
                           Expanded(
                               child: InkWell(
-                            onTap: _handlePressButton,
+                            onTap: _handleSearch,
                             child: Container(
 //                              padding: EdgeInsets.all(24.0),
                               child: Text(
@@ -315,17 +320,26 @@ class MapUiBodyState extends State<MapUiBody> {
     ];
 
     if (mapController != null) {
-//      columnChildren.add(Text("Reserved space..."));
       columnChildren.add(responseList());
       columnChildren.add(MaterialButton(
-        onPressed: getDirection,
+        onPressed: () {
+          setState(() {
+            mapScalingFactor = 0.6;
+          });
+          getDirection();
+
+        },
         child: Icon(Icons.navigation),
       ));
     }
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: columnChildren,
+    return Scaffold(
+      resizeToAvoidBottomPadding: false,
+      drawer: getDrawer(context),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: columnChildren,
+      ),
     );
   }
 
@@ -344,10 +358,55 @@ class MapUiBodyState extends State<MapUiBody> {
   Widget responseList() {
     if (_locationReady) {
       // TODO: Render decoded polylines
-      // TODO: Send path points to FB, awaith response, update polylines and safety score on widget
-      return Text("This is decoded result direction list");
+      // TODO: Send path points to FB, await response, update polylines and safety score on widget
+      return getDirectionCard(pathResponse);
     } else
       return Text("");
+  }
+
+  Widget getDirectionCard(DirectionResponse directionResp) {
+    var nCards = directionResp.routes.length;
+
+    List<Widget> listOfCards = [];
+
+    for (int i = 0; i < nCards; i++) {
+      // Add card for each card
+      listOfCards.add(Card(
+        elevation: 8.0,
+        margin: EdgeInsets.symmetric(
+            horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
+        child: Container(
+          height: deviceHeight / 12,
+          decoration: BoxDecoration(color: Color.fromRGBO(64, 75, 96, 0.9)),
+          child: ListTile(
+              contentPadding: EdgeInsets.symmetric(
+                  horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
+              leading: Container(
+                padding: EdgeInsets.only(right: 12.0),
+                decoration: new BoxDecoration(
+                    border: new Border(
+                        right:
+                            new BorderSide(width: 1.0, color: Colors.white24))),
+                child: Icon(Icons.autorenew, color: Colors.white),
+              ),
+              title: Text(
+                "Title",
+                style:
+                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              subtitle: Row(
+                children: <Widget>[
+                  Text("Subtitle", style: TextStyle(color: Colors.white))
+                ],
+              ),
+              trailing: Text("Placeholder")),
+        ),
+      ));
+    }
+    return ListView(
+        scrollDirection: Axis.vertical,
+        shrinkWrap: true,
+        children: listOfCards);
   }
 
   Future<DirectionResponse> getDirection() async {
@@ -358,9 +417,11 @@ class MapUiBodyState extends State<MapUiBody> {
       var decodedDirections = await fetchDirections(origin, destination);
       var routes = decodedDirections.routes;
       for (int i = 0; i < routes.length; i++) {
+        print(routes[i].polyLineStr);
         _draw_polyline(routes[i].waypoints);
       }
       setState(() {
+        pathResponse = decodedDirections;
         _locationReady = true;
       });
       return decodedDirections;
@@ -388,14 +449,11 @@ class MapUiBodyState extends State<MapUiBody> {
           50.0,
         ),
       );
-//      mapController.moveCamera(
-//        CameraUpdate.zoomOut(),
-//      );
     }
   }
 }
 
-// API Calls
+// API Calls 
 class Route {
   final List<LatLng> waypoints;
   final String polyLineStr;
