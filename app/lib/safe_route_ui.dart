@@ -436,7 +436,7 @@ class MapUiBodyState extends State<MapUiBody> {
             children: <Widget>[
               Padding(padding: EdgeInsets.all(10.0), child: SizedBox(
                   height: deviceHeight / 15,
-                  width: deviceWidth * 0.6,
+                  width: deviceWidth * 0.5,
                   child: buildSafetyCard()
               )),
               // Navigate Button
