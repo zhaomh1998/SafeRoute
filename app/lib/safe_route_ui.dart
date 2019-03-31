@@ -19,8 +19,8 @@ LatLng origin = LatLng(0, 0);
 LatLng destination = LatLng(0, 0);
 
 final LatLngBounds laBounds = LatLngBounds(
-  southwest: const LatLng(34.136, -118.665),
-  northeast: const LatLng(33.728, -117.785),
+  southwest: const LatLng(34.105999, -118.465381),
+  northeast: const LatLng(34.016907, -118.138795),
 );
 
 class MapUiPage extends Page {
@@ -100,6 +100,7 @@ class MapUiBodyState extends State<MapUiBody> {
     print(
         'Setting destination to ${destination.longitude},${destination.latitude}');
     _addMarker(location);
+    getRiskScore(location);
   }
 
   void _onMapTapped(LatLng location) {
@@ -268,8 +269,8 @@ class MapUiBodyState extends State<MapUiBody> {
               child: Center(
                   child: Container(
                       padding: const EdgeInsets.all(0.1),
-                      width: 350.0,
-                      height: 50.0,
+                      width: deviceWidth / 1.05,
+                      height: deviceWidth / 7.0,
                       decoration: new BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.all(
@@ -326,9 +327,10 @@ class MapUiBodyState extends State<MapUiBody> {
           setState(() {
             mapScalingFactor = 0.6;
           });
-          getDirection();
+          navigateProcedure();
         },
         child: Row(
+          // Navigate Button
           mainAxisAlignment: MainAxisAlignment.end,
           children: <Widget>[
             Padding(padding: EdgeInsets.all(10.0), child: Text("Info!")),
@@ -361,7 +363,7 @@ class MapUiBodyState extends State<MapUiBody> {
                               ],
                             ),
                             child: InkWell(
-                                onTap: getDirection,
+                                onTap: navigateProcedure,
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.start,
                                   children: <Widget>[
@@ -413,63 +415,65 @@ class MapUiBodyState extends State<MapUiBody> {
     if (_locationReady) {
       // TODO: Render decoded polylines
       // TODO: Send path points to FB, await response, update polylines and safety score on widget
-      return getDirectionCard(pathResponse);
+      return constructDirectionCard(pathResponse);
     } else
       return Text("");
   }
 
-  Widget getDirectionCard(DirectionResponse directionResp) {
+  Widget constructDirectionCard(DirectionResponse directionResp) {
     var nCards = directionResp.routes.length;
-
     List<Widget> listOfCards = [];
 
     for (int i = 0; i < nCards; i++) {
-      // Add card for each card
+      // Add card for each path
       listOfCards.add(Card(
-        elevation: 8.0,
+        elevation: 1,
         margin: EdgeInsets.symmetric(
-            horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
+            horizontal: deviceWidth / 30, vertical: deviceHeight / 120),
         child: Container(
           height: deviceHeight / 12,
-          decoration: BoxDecoration(color: Color.fromRGBO(64, 75, 96, 0.9)),
+          decoration: BoxDecoration(color: Color.fromRGBO(212, 216, 223, 0.8)),
           child: ListTile(
               contentPadding: EdgeInsets.symmetric(
                   horizontal: deviceWidth / 20, vertical: deviceHeight / 200),
               leading: Container(
-                padding: EdgeInsets.only(right: 12.0),
+                padding: EdgeInsets.only(right: 20.0),
                 decoration: new BoxDecoration(
                     border: new Border(
                         right:
                             new BorderSide(width: 1.0, color: Colors.white24))),
-                child: Icon(Icons.autorenew, color: Colors.white),
+                child: Icon(Icons.trip_origin, color: Colors.white),
               ),
               title: Text(
-                "Title",
-                style:
-                    TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                "Safe",
+                style: TextStyle(
+                    color: Colors.black45, fontWeight: FontWeight.bold),
               ),
               subtitle: Row(
                 children: <Widget>[
-                  Text("Subtitle", style: TextStyle(color: Colors.white))
+                  Text("1.5 miles", style: TextStyle(color: Colors.white))
                 ],
               ),
-              trailing: Text("Placeholder")),
+              trailing: Text("6 mins")),
         ),
       ));
     }
+
     return ListView(
         scrollDirection: Axis.vertical,
         shrinkWrap: true,
         children: listOfCards);
   }
 
-  Future<DirectionResponse> getDirection() async {
+  Future<DirectionResponse> navigateProcedure() async {
     if (origin.longitude != 0 &&
         origin.latitude != 0 &&
         destination.longitude != 0 &&
         destination.latitude != 0) {
+      // Step 1. Retrieve Directions
       var decodedDirections = await fetchDirections(origin, destination);
       var routes = decodedDirections.routes;
+      // Step 2. Draw Polyline
       for (int i = 0; i < routes.length; i++) {
         print(routes[i].polyLineStr);
         _draw_polyline(routes[i].waypoints);
@@ -478,6 +482,10 @@ class MapUiBodyState extends State<MapUiBody> {
         pathResponse = decodedDirections;
         _locationReady = true;
       });
+      // Step 3. Request from Database
+      getPathScore(decodedDirections);
+      // TODO
+      // Step 4. Update UI
       return decodedDirections;
     }
     return null;
@@ -540,13 +548,36 @@ class DirectionResponse {
   }
 }
 
-Future<void> fbTest() async {
-  final response = await http
-      .get('https://us-central1-saferoute-d749c.cloudfunctions.net/helloWorld');
+Future<void> getRiskScore(LatLng location) async {
+  var now = new DateTime.now();
+  final response = await http.get(
+      'https://saferoute-d749c.appspot.com//riskScore?hour=${now.hour}&' +
+          'latitude=${location.latitude}&longitude=${location.longitude}');
 
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
-    return print(json.decode(response.body));
+    print("RiskScore=${json.decode(response.body)['score']}");
+  } else {
+    // If that call was not successful, throw an error.
+    throw Exception('Failed to load post');
+  }
+}
+
+Future<void> getPathScore(DirectionResponse paths) async {
+  var now = new DateTime.now();
+  List<String> polyLineStrs = [];
+  paths.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
+  String req = jsonEncode({"hour": now.hour, "polyline": polyLineStrs});
+  print(req);
+  final response = await http
+      .post('https://saferoute-d749c.appspot.com//pathRiskScore', body: req);
+  if (response.statusCode == 200) {
+    // If the call to the server was successful, parse the JSON
+    var responseDecode = json.decode(response.body);
+    if (responseDecode['status'] != 'OK')
+      throw Exception('Response status ${responseDecode['status']}');
+    else
+      return DirectionResponse.fromJson(responseDecode);
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
