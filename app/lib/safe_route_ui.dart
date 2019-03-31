@@ -93,6 +93,7 @@ class MapUiBodyState extends State<MapUiBody> {
   }
   void _onMapTapped(LatLng location) {
     _tapped = location;
+    _onSelectedLocation(location, false);
   }
   Widget _mapTypeCycler() {
     final MapType nextType =
@@ -111,13 +112,14 @@ class MapUiBodyState extends State<MapUiBody> {
       SnackBar(content: Text(response.errorMessage)),
     );
   }
-  void _onSelectedLocation(LatLng location, bool isDestination) async{
-    if(isDestination)
+  void _onSelectedLocation(LatLng location, bool isDestination) async {
+    if (isDestination) {
       destination = location;
+      _addMarker(location);
+      getRiskScore(location);
+    }
     else
-      origin = location;
-    _addMarker(location);
-    getRiskScore(location);
+      _addOrigin(location);
   }
 
 
@@ -204,6 +206,15 @@ class MapUiBodyState extends State<MapUiBody> {
     mapController.addMarker(markerOptions);
     mapController.animateCamera(CameraUpdate.newCameraPosition(
         CameraPosition(target: location, zoom: 15.0)));
+  }
+  void _addOrigin(LatLng location) {
+    final markerOptions = MarkerOptions(
+        position: location,
+        infoWindowText:
+        InfoWindowText("Origin", "${location.latitude},${location.longitude}"),
+        rotation: 30.0);
+    mapController.addMarker(markerOptions);
+    origin = location;
   }
   void _launchGMap(LatLng originLocation, LatLng destinationLocation) async {
     String origin="${originLocation.latitude},${originLocation.longitude}";  // lat,long like 123.34,68.56
@@ -612,6 +623,7 @@ Future<DirectionResponse> getPathScore() async {
     for(int i = 0; i < pathResponse.routes.length; i++) {
       pathResponse.routes[i].score = responseDecode['data'][i].toDouble();
     }
+    print("Query Safe Score: ${responseDecode}");
     return pathResponse;
   } else {
     // If that call was not successful, throw an error.
