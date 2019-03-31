@@ -68,6 +68,7 @@ class MapUiBodyState extends State<MapUiBody> {
   LatLng _tappedLong = const LatLng(0, 0);
   LatLng _tappedLocation = const LatLng(0, 0);
   bool _locationReady = false;
+  bool _readyToNavigate = false;
   DirectionResponse pathResponse;
 
   final homeScaffoldKey = GlobalKey<ScaffoldState>();
@@ -80,19 +81,6 @@ class MapUiBodyState extends State<MapUiBody> {
     super.initState();
   }
 
-//  void _onMapChanged() {
-//    setState(() {
-//      _extractMapInfo();
-//    });
-//  }
-
-  void _onLocationClick(LatLng location) {
-    _tappedLocation = location;
-  }
-
-  void _onLocationButtonClick() {
-    _locationButton++;
-  }
 
   void _onMapLongTapped(LatLng location) {
     _tappedLong = location;
@@ -107,31 +95,12 @@ class MapUiBodyState extends State<MapUiBody> {
     _tapped = location;
   }
 
-//  void _extractMapInfo() {
-//    _position = mapController.cameraPosition;
-//    _isMoving = mapController.isCameraMoving;
-//  }
-
   @override
   void dispose() {
 //    mapController.removeListener(_onMapChanged);
     super.dispose();
   }
 
-  Widget _compassToggler() {
-    return FlatButton(
-      child: Text('${_compassEnabled ? 'disable' : 'enable'} compass'),
-      onPressed: () {
-        setState(() {
-          _compassEnabled = !_compassEnabled;
-        });
-      },
-    );
-  }
-
-//  Widget _drawerOpener() {
-//
-//  }
 
   Widget _mapTypeCycler() {
     final MapType nextType =
@@ -152,7 +121,6 @@ class MapUiBodyState extends State<MapUiBody> {
 
     mapController.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
         target: center == null ? LatLng(0, 0) : center, zoom: 15.0)));
-//    getNearbyPlaces(center);
   }
 
   Future<LatLng> getUserLocation() async {
@@ -219,18 +187,9 @@ class MapUiBodyState extends State<MapUiBody> {
     }
   }
 
-  Widget _myLocationButtonToggler() {
-    return FlatButton(
-      child: Text(
-          '${_myLocationButtonEnabled ? 'disable' : 'enable'} my location button'),
-      onPressed: () {
-        setState(() {
-          _myLocationButtonEnabled = !_myLocationButtonEnabled;
-        });
-      },
-    );
+  void _searchBarBtnHandle() {
+    print("SearchBarBtnHandle!!");
   }
-
   @override
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIOverlays([]);
@@ -250,31 +209,106 @@ class MapUiBodyState extends State<MapUiBody> {
         zoomGesturesEnabled: _zoomGesturesEnabled,
         myLocationEnabled: _myLocationEnabled,
         myLocationButtonEnabled: _myLocationButtonEnabled);
-    final List<Widget> columnChildren = <Widget>[
-//      Padding(
-//        padding: const EdgeInsets.all(10.0),
-//        child:
-//      ),
-      Center(
-          child: Stack(
+
+    return Scaffold(
+      resizeToAvoidBottomPadding: false,
+      drawer: getDrawer(context),
+      body: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          SizedBox(
-            width: deviceWidth,
-            height: deviceHeight * mapScalingFactor,
-            child: googleMap,
-          ),
-          Padding(
-              // Search bar
-              padding: const EdgeInsets.all(12.0),
-              child: Center(
+          buildMap(googleMap, context),
+          buildBottomBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget buildMap(GoogleMap googleMap, BuildContext context) {
+    return Center(
+        child: Stack(
+      children: <Widget>[
+        SizedBox(
+          width: deviceWidth,
+          height: deviceHeight * mapScalingFactor,
+          child: googleMap,
+        ),
+        Padding(
+            // Search bar
+            padding: const EdgeInsets.all(12.0),
+            child: Center(
+                child: Container(
+                    padding: const EdgeInsets.all(0.1),
+                    width: deviceWidth / 1.05,
+                    height: deviceWidth / 7.0,
+                    decoration: new BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.all(
+                        const Radius.circular(10.0),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.8),
+                          blurRadius: 3,      // softening shadow
+                          spreadRadius: 0.25, // extending shadow
+                          offset: Offset(0.5, 0.5)
+                        )
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: <Widget>[
+                        MaterialButton(
+                          onPressed: () => _searchBarBtnHandle,
+                          child: Icon(
+                            Icons.dehaze,
+                            size: 25.0,
+                          ),
+                          height: 100.0,
+                          minWidth: 50.0,
+                        ),
+                        Expanded(
+                            child: InkWell(
+                          onTap: _handleSearch,
+                          child: Container(
+//                              padding: EdgeInsets.all(24.0),
+                            child: Text(
+                              "Search Location...                        ",
+                              style: TextStyle(color: Colors.grey),
+                              textAlign: TextAlign.start,
+                            ),
+                          ),
+                        ))
+                      ],
+                    ))))
+      ],
+    ));
+  }
+
+  Widget buildBottomBar() {
+    return Column(
+        children: <Widget>[
+          buildMiddleBar(),
+          Row(
+            // Navigate Button
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: <Widget>[
+              Padding(padding: EdgeInsets.all(10.0), child: SizedBox(
+                height: deviceHeight / 15,
+                width: deviceWidth * 0.6,
+                child: Text("hi"),
+              )),
+              // Navigate Button
+              Padding(
+                  padding: const EdgeInsets.all(12.0),
                   child: Container(
                       padding: const EdgeInsets.all(0.1),
-                      width: deviceWidth / 1.05,
-                      height: deviceWidth / 7.0,
+                      width: deviceWidth / 4,
+                      height: deviceHeight / 15,
                       decoration: new BoxDecoration(
-                        color: Colors.white,
+                        color: Color.fromARGB(255, 58, 120, 231),
                         borderRadius: BorderRadius.all(
-                          const Radius.circular(10.0),
+                          const Radius.circular(30.0),
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -290,112 +324,32 @@ class MapUiBodyState extends State<MapUiBody> {
                           )
                         ],
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: <Widget>[
-                          MaterialButton(
-                            onPressed: () => Scaffold.of(context).openDrawer(),
-                            child: Icon(
-                              Icons.dehaze,
-                              size: 25.0,
-                            ),
-                            height: 100.0,
-                            minWidth: 50.0,
-                          ),
-                          Expanded(
-                              child: InkWell(
-                            onTap: _handleSearch,
-                            child: Container(
-//                              padding: EdgeInsets.all(24.0),
-                              child: Text(
-                                "Search Location...                        ",
-                                style: TextStyle(color: Colors.grey),
+                      child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              mapScalingFactor = 0.6;
+                              _readyToNavigate = !_readyToNavigate;
+                              navigateProcedure();
+                            });
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: <Widget>[
+                              Icon(
+                                Icons.navigation,
+                                size: 25.0,
+                                color: Colors.white,
+                              ),
+                              Text(
+                                _readyToNavigate ? "Navigate" : "Safe Route",
+                                style: TextStyle(color: Colors.white),
                                 textAlign: TextAlign.start,
                               ),
-                            ),
-                          ))
-                        ],
-                      ))))
-        ],
-      )),
-    ];
-
-    if (mapController != null) {
-      columnChildren.add(responseList());
-      columnChildren.add(MaterialButton(
-        onPressed: () {
-          setState(() {
-            mapScalingFactor = 0.6;
-          });
-          navigateProcedure();
-        },
-        child: Row(
-          // Navigate Button
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: <Widget>[
-            Padding(padding: EdgeInsets.all(10.0), child: Text("Info!")),
-            Expanded(
-                child: Padding(
-                    // Search bar
-                    padding: const EdgeInsets.all(12.0),
-                    child: Center(
-                        child: Container(
-                            padding: const EdgeInsets.all(0.1),
-                            width: 350.0,
-                            height: 50.0,
-                            decoration: new BoxDecoration(
-                              color: Color.fromARGB(255, 58, 120, 231),
-                              borderRadius: BorderRadius.all(
-                                const Radius.circular(30.0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.grey.withOpacity(0.8),
-                                  blurRadius: 3,
-                                  // has the effect of softening the shadow
-                                  spreadRadius: 0.25,
-                                  // has the effect of extending the shadow
-                                  offset: Offset(
-                                    0.5, // horizontal, move right 10
-                                    0.5, // vertical, move down 10
-                                  ),
-                                )
-                              ],
-                            ),
-                            child: InkWell(
-                                onTap: navigateProcedure,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.navigation,
-                                      size: 25.0,
-                                      color: Colors.white,
-                                    ),
-                                    Expanded(
-                                      child: Container(
-//                              padding: EdgeInsets.all(24.0),
-                                        child: Text(
-                                          "Navigate",
-                                          style: TextStyle(color: Colors.white),
-                                          textAlign: TextAlign.start,
-                                        ),
-                                      ),
-                                    )
-                                  ],
-                                ))))))
-          ],
-        ),
-      ));
-    }
-    return Scaffold(
-      resizeToAvoidBottomPadding: false,
-      drawer: getDrawer(context),
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: columnChildren,
-      ),
+                            ],
+                          ))))
+            ],
+          ),
+        ]
     );
   }
 
@@ -411,7 +365,7 @@ class MapUiBodyState extends State<MapUiBody> {
     });
   }
 
-  Widget responseList() {
+  Widget buildMiddleBar() {
     if (_locationReady) {
       // TODO: Render decoded polylines
       // TODO: Send path points to FB, await response, update polylines and safety score on widget
@@ -471,7 +425,7 @@ class MapUiBodyState extends State<MapUiBody> {
         destination.longitude != 0 &&
         destination.latitude != 0) {
       // Step 1. Retrieve Directions
-      var decodedDirections = await fetchDirections(origin, destination);
+      var decodedDirections = await getGMapDirection(origin, destination);
       var routes = decodedDirections.routes;
       // Step 2. Draw Polyline
       for (int i = 0; i < routes.length; i++) {
@@ -515,7 +469,9 @@ class MapUiBodyState extends State<MapUiBody> {
   }
 }
 
-// API Calls
+// API Stuff
+
+// API Response Factories
 class Route {
   final List<LatLng> waypoints;
   final String polyLineStr;
@@ -548,6 +504,27 @@ class DirectionResponse {
   }
 }
 
+// API Callers
+Future<DirectionResponse> getGMapDirection(LatLng origin, LatLng dest) async {
+  var request_url = 'https://maps.googleapis.com/maps/api/directions/json?' +
+      'origin=${origin.latitude},${origin.longitude}&' +
+      'destination=${dest.latitude},${dest.longitude}&' +
+      'mode=walking&alternatives=true&key=${api_key.kGoogleApiKey}';
+  final response = await http.get(request_url);
+
+  if (response.statusCode == 200) {
+    // If the call to the server was successful, parse the JSON
+    var responseDecode = json.decode(response.body);
+    if (responseDecode['status'] != 'OK')
+      throw Exception('Response status ${responseDecode['status']}');
+    else
+      return DirectionResponse.fromJson(responseDecode);
+  } else {
+    // If that call was not successful, throw an error.
+    throw Exception('Failed to load post');
+  }
+}
+
 Future<void> getRiskScore(LatLng location) async {
   var now = new DateTime.now();
   final response = await http.get(
@@ -569,41 +546,21 @@ Future<void> getPathScore(DirectionResponse paths) async {
   paths.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
   String req = jsonEncode({"hour": now.hour, "polyline": polyLineStrs});
   print(req);
-  final response = await http
-      .post('https://saferoute-d749c.appspot.com//pathRiskScore', body: req);
+  final response = await http.post(
+      'https://saferoute-d749c.appspot.com//pathRiskScore',
+      body: req,
+      headers: {'Content-Type': 'application/json; charset=UTF-8'});
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
     var responseDecode = json.decode(response.body);
-    if (responseDecode['status'] != 'OK')
-      throw Exception('Response status ${responseDecode['status']}');
-    else
-      return DirectionResponse.fromJson(responseDecode);
+    print(responseDecode);
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
   }
 }
 
-Future<DirectionResponse> fetchDirections(LatLng origin, LatLng dest) async {
-  var request_url = 'https://maps.googleapis.com/maps/api/directions/json?' +
-      'origin=${origin.latitude},${origin.longitude}&' +
-      'destination=${dest.latitude},${dest.longitude}&' +
-      'mode=walking&alternatives=true&key=${api_key.kGoogleApiKey}';
-  final response = await http.get(request_url);
-
-  if (response.statusCode == 200) {
-    // If the call to the server was successful, parse the JSON
-    var responseDecode = json.decode(response.body);
-    if (responseDecode['status'] != 'OK')
-      throw Exception('Response status ${responseDecode['status']}');
-    else
-      return DirectionResponse.fromJson(responseDecode);
-  } else {
-    // If that call was not successful, throw an error.
-    throw Exception('Failed to load post');
-  }
-}
-
+// Decoder Util
 // Author: RaimundWege https://github.com/johnpryan/flutter_map/issues/91
 List<LatLng> decodePolyline(String encoded) {
   List<LatLng> points = new List<LatLng>();
