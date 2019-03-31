@@ -18,6 +18,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
+List<Color> POLY_LINE_COLORS = [Colors.green, Colors.orangeAccent, Colors.redAccent];
 LatLng origin = LatLng(0, 0);
 LatLng destination = LatLng(0, 0);
 DirectionResponse pathResponse;
@@ -25,6 +26,7 @@ List<Polyline> existingPolylines = [];
 List<Marker> existingMarkers = [];
 Marker existingOriginMarker;
 double markerSafetyScore = -1;
+
 
 final LatLngBounds laBounds = LatLngBounds(
   southwest: const LatLng(34.105999, -118.465381),
@@ -278,6 +280,44 @@ class MapUiBodyState extends State<MapUiBody> {
       }
     }
   } // TODO: add biking mode
+
+  List<Color> _calcPolylineColors() {
+    int nPolyLines = existingPolylines.length;
+    List<double> safetyScores = [];
+    List<double> safetyScoresSorted = [];
+    List<int> polylineColorAssignment = [];
+    List<Color> polylineColors = [];
+    double maxScore = 0;
+    double minScore = 1;
+    for(int i = 0; i < nPolyLines; i++) {
+      var thisScore = pathResponse.routes[i].score;
+      safetyScores.add(thisScore);
+      safetyScoresSorted.add(thisScore);
+      if(thisScore > maxScore)
+        maxScore = thisScore;
+      if(thisScore < minScore)
+        minScore = thisScore;
+    }
+    safetyScoresSorted.sort();
+    for(int i = 0; i < nPolyLines; i++) {
+      polylineColorAssignment.add(safetyScoresSorted.indexOf(safetyScores[i]));
+      polylineColors.add(POLY_LINE_COLORS[polylineColorAssignment[i]]);
+    }
+    return polylineColors;
+  }
+  Widget _getSafetyText(double safetyScore) {
+    var text;
+    var textColor;
+    if(safetyScore < 0.05) {text = "Safe"; textColor=Colors.green;}
+    else if(safetyScore < 0.15) {text = "Neutral"; textColor=Colors.yellow;}
+    else if(safetyScore < 0.4) {text = "Risky"; textColor=Colors.orangeAccent;}
+    else {text = "Try to avoid"; textColor=Colors.redAccent;}
+
+    return Text(text,
+      style: TextStyle(
+          color: textColor, fontWeight: FontWeight.bold),
+    );
+  }
   @override
   void dispose() {
     super.dispose();
@@ -395,21 +435,21 @@ class MapUiBodyState extends State<MapUiBody> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: <Widget>[
               Padding(padding: EdgeInsets.all(10.0), child: SizedBox(
-                height: deviceHeight / 15,
-                width: deviceWidth * 0.6,
-                child: buildSafetyCard()
+                  height: deviceHeight / 15,
+                  width: deviceWidth * 0.6,
+                  child: buildSafetyCard()
               )),
               // Navigate Button
               Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Container(
-                      padding: const EdgeInsets.all(0.1),
-                      width: deviceWidth / 4,
-                      height: deviceHeight / 15,
+                      padding: const EdgeInsets.all(8),
+                      width: deviceWidth / 3,
+                      height: deviceHeight / 18,
                       decoration: new BoxDecoration(
                         color: Color.fromARGB(255, 58, 120, 231),
                         borderRadius: BorderRadius.all(
-                          const Radius.circular(30.0),
+                          const Radius.circular(20.0),
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -429,7 +469,7 @@ class MapUiBodyState extends State<MapUiBody> {
                           onTap: () {
                             setState(() {
                               _readyToNavigate = !_readyToNavigate;
-                              if(_readyToNavigate)
+                              if (_readyToNavigate)
                                 navigateProcedure();
                               else
                                 _launchGMap(origin, destination);
@@ -444,7 +484,7 @@ class MapUiBodyState extends State<MapUiBody> {
                                 color: Colors.white,
                               ),
                               Text(
-                                _readyToNavigate ? "Navigate" : "Safe Route",
+                                _readyToNavigate ? " Navigate" : " Safe route",
                                 style: TextStyle(color: Colors.white),
                                 textAlign: TextAlign.start,
                               ),
@@ -504,7 +544,13 @@ class MapUiBodyState extends State<MapUiBody> {
   Widget constructDirectionCard(bool isWaiting) {
     var nCards = pathResponse.routes.length;
     List<Widget> listOfCards = [];
-
+    var colors;
+    if(!isWaiting) {
+      colors = _calcPolylineColors();
+        for(int i = 0; i < nCards; i++) {
+          _setPolylineProperty(existingPolylines[i], colors[i].value, 10.0);
+        };
+    }
     for (int i = 0; i < nCards; i++) {
       // Add card for each path
       listOfCards.add(Card(
@@ -526,16 +572,21 @@ class MapUiBodyState extends State<MapUiBody> {
                         new BorderSide(width: 1.0, color: Colors.white24))),
                 child: Icon(Icons.trip_origin, color: Colors.white),
               ),
-              title: Text(isWaiting? "Loading Safety Data..." : pathResponse.routes[i].score.toString(),
+              title: isWaiting? Text( "Loading ...",
                 style: TextStyle(
                     color: Colors.black45, fontWeight: FontWeight.bold),
-              ),
+              ) : _getSafetyText(pathResponse.routes[i].score),
               subtitle: Row(
                 children: <Widget>[
-                  Text(pathResponse.routes[i].distance, style: TextStyle(color: Colors.white))
+                  isWaiting? Text("Loading") : Text(pathResponse.routes[i].score.toString(), style: TextStyle(color: colors[i]))
                 ],
               ),
-              trailing: Text(pathResponse.routes[i].duration)),
+              trailing: Column(
+                children: <Widget>[
+                  Text(pathResponse.routes[i].distance),
+                  Text(pathResponse.routes[i].duration),
+                ],
+              )),
         ),
       ));
     }
@@ -566,15 +617,16 @@ class MapUiBodyState extends State<MapUiBody> {
               child: Icon(Icons.pin_drop, color: Colors.white),
             ),
             title: Text(markerSafetyScore.toString(), style: TextStyle(color: Colors.white)),
-            subtitle: Row(
-              children: <Widget>[
-                Text("-2 is no data, -1....skjfnsdkjgbdsf")
-              ],
-            ),
-            trailing: Text(isWaiting? "Loading Safety Data..." : "Safe??ChangeME!",
-              style: TextStyle(
-                  color: Colors.black45, fontWeight: FontWeight.bold),
-            ),),
+//            subtitle: Row(
+//              children: <Widget>[
+//                Text("-2 is no data, -1....skjfnsdkjgbdsf")
+//              ],
+//            ),
+//            trailing: Text(isWaiting? "Loading Safety Data..." : "Safe??ChangeME!",
+//              style: TextStyle(
+//                  color: Colors.black45, fontWeight: FontWeight.bold),
+//            ),
+        ),
       ),
     );
   }
