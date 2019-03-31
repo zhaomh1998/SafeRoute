@@ -343,23 +343,36 @@ class MapUiBodyState extends State<MapUiBody> {
 }
 
 // API Calls
-class DirectionResponse {
-  final int userId;
-  final int id;
-  final String title;
-  final String body;
+class Route {
+  final List<LatLng> waypoints;
+  final String polyLineStr;
+  final String duration;
+  final String distance;
 
-  DirectionResponse({this.userId, this.id, this.title, this.body});
+  Route({this.waypoints, this.polyLineStr, this.duration, this.distance});
+
+  factory Route.parseRoute(dynamic route) {
+    return Route(
+        waypoints: decodePolyline(route['overview_polyline']['points']),
+        polyLineStr: route['overview_polyline']['points'],
+        duration: route['legs'][0]['duration']['text'],
+        distance: route['legs'][0]['distance']['text']);
+  }
+}
+
+class DirectionResponse {
+  final List<Route> routes;
+
+  DirectionResponse({this.routes});
 
   factory DirectionResponse.fromJson(Map<String, dynamic> json) {
-    print('Decoded:');
-    print(json['body'].toString());
-    return DirectionResponse(
-      userId: json['userId'],
-      id: json['id'],
-      title: json['title'],
-      body: json['body'],
-    );
+    var input = json['routes'];
+    List<Route> decodedRoutes = [];
+    for (int i = 0; i < input.length; i++) {
+      var parsedRoute = Route.parseRoute(input[i]);
+      decodedRoutes.add(parsedRoute);
+    }
+    return DirectionResponse(routes: decodedRoutes);
   }
 }
 
@@ -380,8 +393,10 @@ Future<DirectionResponse> getDirection() async {
   if (origin.longitude != 0 &&
       origin.latitude != 0 &&
       destination.longitude != 0 &&
-      destination.latitude != 0)
-    return await fetchDirections(origin, destination);
+      destination.latitude != 0) {
+    var decodedDirections = await fetchDirections(origin, destination);
+    return decodedDirections;
+  }
   return null;
 }
 
@@ -394,8 +409,11 @@ Future<DirectionResponse> fetchDirections(LatLng origin, LatLng dest) async {
 
   if (response.statusCode == 200) {
     // If the call to the server was successful, parse the JSON
-    print(json.decode(response.body));
-    return DirectionResponse.fromJson(json.decode(response.body));
+    var responseDecode = json.decode(response.body);
+    if (responseDecode['status'] != 'OK')
+      throw Exception('Response status ${responseDecode['status']}');
+    else
+      return DirectionResponse.fromJson(responseDecode);
   } else {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
