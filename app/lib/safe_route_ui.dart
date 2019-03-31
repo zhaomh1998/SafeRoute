@@ -1,7 +1,3 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:google_maps_webservice/places.dart';
@@ -9,6 +5,7 @@ import 'package:flutter_google_places/flutter_google_places.dart';
 import 'package:location/location.dart' as LocationManager;
 import 'api_key.dart' as api_key;
 import 'page.dart';
+import 'dart:math';
 
 // API Call stuff
 import 'dart:async';
@@ -96,6 +93,7 @@ class MapUiBodyState extends State<MapUiBody> {
     destination = location;
     print(
         'Setting destination to ${destination.longitude},${destination.latitude}');
+    _addMarker(location);
   }
 
   void _onMapTapped(LatLng location) {
@@ -176,14 +174,18 @@ class MapUiBodyState extends State<MapUiBody> {
     print(
         "${targetLocation.latitude.toString()}, ${targetLocation.longitude.toString()}");
     if (targetLocation != null) {
-      final markerOptions = MarkerOptions(
-          position: targetLocation,
-          infoWindowText: InfoWindowText(
-              "${targetLocation.latitude}", "${targetLocation.longitude}"));
-      mapController.addMarker(markerOptions);
-      mapController.animateCamera(CameraUpdate.newCameraPosition(
-          CameraPosition(target: targetLocation, zoom: 15.0)));
+      _addMarker(targetLocation);
     }
+  }
+
+  void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) {
+    final markerOptions = MarkerOptions(
+        position: location,
+        infoWindowText:
+            InfoWindowText("${location.latitude}", "${location.longitude}"));
+    mapController.addMarker(markerOptions);
+    mapController.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: location, zoom: 15.0)));
   }
 
   Future<LatLng> _searchLocation() async {
@@ -255,12 +257,12 @@ class MapUiBodyState extends State<MapUiBody> {
           ),
           Padding(
               // Search bar
-              padding: const EdgeInsets.all(20.0),
+              padding: const EdgeInsets.all(12.0),
               child: Center(
                   child: Container(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.all(0.1),
                       width: 350.0,
-                      height: 60.0,
+                      height: 50.0,
                       decoration: new BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.all(
@@ -268,8 +270,8 @@ class MapUiBodyState extends State<MapUiBody> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey,
-                            blurRadius: 2,
+                            color: Colors.grey.withOpacity(0.8),
+                            blurRadius: 3,
                             // has the effect of softening the shadow
                             spreadRadius: 0.25,
                             // has the effect of extending the shadow
@@ -283,23 +285,29 @@ class MapUiBodyState extends State<MapUiBody> {
 //                        gradient: new LinearGradient(...),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisAlignment: MainAxisAlignment.start,
                         children: <Widget>[
                           MaterialButton(
                             onPressed: () => print("Hello"),
-                            child: Icon(Icons.dehaze),
+                            child: Icon(
+                              Icons.dehaze,
+                              size: 25.0,
+                            ),
+                            height: 100.0,
+                            minWidth: 50.0,
                           ),
-                          InkWell(
+                          Expanded(
+                              child: InkWell(
                             onTap: _handlePressButton,
                             child: Container(
-                              color: Colors.grey,
 //                              padding: EdgeInsets.all(24.0),
                               child: Text(
-                                "Fukuuuu",
+                                "Search Location...                        ",
+                                style: TextStyle(color: Colors.grey),
                                 textAlign: TextAlign.start,
                               ),
                             ),
-                          )
+                          ))
                         ],
                       ))))
         ],
@@ -307,10 +315,11 @@ class MapUiBodyState extends State<MapUiBody> {
     ];
 
     if (mapController != null) {
-      columnChildren.add(Text("Reserved space..."));
+//      columnChildren.add(Text("Reserved space..."));
+      columnChildren.add(responseList());
       columnChildren.add(MaterialButton(
         onPressed: getDirection,
-        child: Icon(Icons.send),
+        child: Icon(Icons.navigation),
       ));
     }
     return Column(
@@ -338,7 +347,51 @@ class MapUiBodyState extends State<MapUiBody> {
       // TODO: Send path points to FB, awaith response, update polylines and safety score on widget
       return Text("This is decoded result direction list");
     } else
-      return null;
+      return Text("");
+  }
+
+  Future<DirectionResponse> getDirection() async {
+    if (origin.longitude != 0 &&
+        origin.latitude != 0 &&
+        destination.longitude != 0 &&
+        destination.latitude != 0) {
+      var decodedDirections = await fetchDirections(origin, destination);
+      var routes = decodedDirections.routes;
+      for (int i = 0; i < routes.length; i++) {
+        _draw_polyline(routes[i].waypoints);
+      }
+      setState(() {
+        _locationReady = true;
+      });
+      return decodedDirections;
+    }
+    return null;
+  }
+
+  void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) {
+    mapController.addPolyline(PolylineOptions(
+        points: waypts,
+        color: Colors.blue.withOpacity(0.8).value,
+        width: 20,
+        visible: true));
+    if (readjustView) {
+      var origLoc = LatLng(waypts[0].latitude, waypts[0].longitude);
+      var newLoc = LatLng(waypts[waypts.length - 1].latitude,
+          waypts[waypts.length - 1].longitude);
+      var swLoc = LatLng(min(origLoc.latitude, newLoc.latitude),
+          min(origLoc.longitude, newLoc.longitude));
+      var neLoc = LatLng(max(origLoc.latitude, newLoc.latitude),
+          max(origLoc.longitude, newLoc.longitude));
+      mapController.moveCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(southwest: swLoc, northeast: neLoc),
+          50.0,
+        ),
+      );
+//      mapController.moveCamera(
+//        CameraUpdate.zoomOut(),
+//      );
+    }
   }
 }
 
@@ -369,8 +422,7 @@ class DirectionResponse {
     var input = json['routes'];
     List<Route> decodedRoutes = [];
     for (int i = 0; i < input.length; i++) {
-      var parsedRoute = Route.parseRoute(input[i]);
-      decodedRoutes.add(parsedRoute);
+      decodedRoutes.add(Route.parseRoute(input[i]));
     }
     return DirectionResponse(routes: decodedRoutes);
   }
@@ -387,17 +439,6 @@ Future<void> fbTest() async {
     // If that call was not successful, throw an error.
     throw Exception('Failed to load post');
   }
-}
-
-Future<DirectionResponse> getDirection() async {
-  if (origin.longitude != 0 &&
-      origin.latitude != 0 &&
-      destination.longitude != 0 &&
-      destination.latitude != 0) {
-    var decodedDirections = await fetchDirections(origin, destination);
-    return decodedDirections;
-  }
-  return null;
 }
 
 Future<DirectionResponse> fetchDirections(LatLng origin, LatLng dest) async {
