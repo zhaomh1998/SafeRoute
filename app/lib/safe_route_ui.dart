@@ -21,6 +21,9 @@ GoogleMapsPlaces _places = GoogleMapsPlaces(apiKey: api_key.kGoogleApiKey);
 LatLng origin = LatLng(0, 0);
 LatLng destination = LatLng(0, 0);
 DirectionResponse pathResponse;
+List<Polyline> existingPolylines = [];
+List<Marker> existingMarkers = [];
+Marker existingOriginMarker;
 
 final LatLngBounds laBounds = LatLngBounds(
   southwest: const LatLng(34.105999, -118.465381),
@@ -54,7 +57,6 @@ class MapUiBodyState extends State<MapUiBody> {
   double deviceWidth;
   double deviceHeight;
   double mapHeight;
-  double mapScalingFactor = 0.87;
   GoogleMapController mapController;
   CameraPosition _position = _kInitialPosition;
   bool _isMoving = false;
@@ -124,12 +126,12 @@ class MapUiBodyState extends State<MapUiBody> {
 
 
   // Map Helpers----------------------------------------------------------------
-  void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) {
-    mapController.addPolyline(PolylineOptions(
+  void _draw_polyline(List<LatLng> waypts, {bool readjustView: true}) async{
+    existingPolylines.add(await mapController.addPolyline(PolylineOptions(
         points: waypts,
         color: Colors.blue.withOpacity(0.8).value,
         width: 20,
-        visible: true));
+        visible: true)));
     if (readjustView) {
       var origLoc = LatLng(waypts[0].latitude, waypts[0].longitude);
       var newLoc = LatLng(waypts[waypts.length - 1].latitude,
@@ -198,27 +200,62 @@ class MapUiBodyState extends State<MapUiBody> {
       _onSelectedLocation(targetLocation, true);
     }
   }
-  void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) {
+  void _addMarker(LatLng location, {bool moveCamera: true, double zoom: 15.0}) async {
     final markerOptions = MarkerOptions(
         position: location,
         infoWindowText:
         InfoWindowText("${location.latitude}", "${location.longitude}"));
-    mapController.addMarker(markerOptions);
+    existingMarkers.add(await mapController.addMarker(markerOptions));
     mapController.animateCamera(CameraUpdate.newCameraPosition(
         CameraPosition(target: location, zoom: 15.0)));
   }
-  void _addOrigin(LatLng location) {
+  void _addOrigin(LatLng location) async {
     final markerOptions = MarkerOptions(
         position: location,
         infoWindowText:
         InfoWindowText("Origin", "${location.latitude},${location.longitude}"),
         rotation: 30.0);
-    mapController.addMarker(markerOptions);
+    if(existingOriginMarker != null) {
+      setState(() {
+        _deleteMarker(existingOriginMarker);
+      });
+    }
+    existingOriginMarker = await mapController.addMarker(markerOptions);
     origin = location;
+  }
+  void _deleteMarker(Marker aMarker) {
+      mapController.removeMarker(aMarker);
+      aMarker = null;
+  }
+  void _deletePolyline(Polyline aPolyline) {
+      mapController.removePolyline(aPolyline);
+      aPolyline = null;
+  }
+  void _setPolylineProperty(Polyline aPolyline, int aColor, double aThickness) {
+      mapController.updatePolyline(aPolyline, PolylineOptions(color: aColor, width: aThickness));
+  }
+  void _deleteAllMarker(List<Marker> allMarkers) {
+    int nMarkers = allMarkers.length;
+    setState(() {
+      for(int i = 0; i < nMarkers; i++) {
+        _deleteMarker(allMarkers[allMarkers.length-1]);
+        allMarkers.removeAt(allMarkers.length-1);
+      }
+    });
+  }
+  void _deleteAllPolyline(List<Polyline> allPolylines) {
+    int nPolylines = allPolylines.length;
+    setState(() {
+      for(int i = 0; i < nPolylines; i++) {
+        _deletePolyline(allPolylines[allPolylines.length-1]);
+        allPolylines.removeAt(allPolylines.length-1);
+      }
+    });
   }
   void _launchGMap(LatLng originLocation, LatLng destinationLocation) async {
     String origin="${originLocation.latitude},${originLocation.longitude}";  // lat,long like 123.34,68.56
     String destination="${destinationLocation.latitude},${destinationLocation.longitude}";
+    cleanup();
     if (Platform.isAndroid) {
       final AndroidIntent intent = new AndroidIntent(
           action: 'action_view',
@@ -240,6 +277,14 @@ class MapUiBodyState extends State<MapUiBody> {
   @override
   void dispose() {
     super.dispose();
+  }
+  void cleanup() {
+    setState(() {
+      _deleteAllMarker(existingMarkers);
+      _deleteAllPolyline(existingPolylines);
+      _locationReady = false;
+      _readyToNavigate = false;
+    });
   }
 
 
@@ -283,7 +328,7 @@ class MapUiBodyState extends State<MapUiBody> {
       children: <Widget>[
         SizedBox(
           width: deviceWidth,
-          height: deviceHeight * mapScalingFactor,
+          height: _locationReady? deviceHeight * 0.6 : deviceHeight * 0.87 ,
           child: googleMap,
         ),
         Padding(
@@ -312,7 +357,7 @@ class MapUiBodyState extends State<MapUiBody> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: <Widget>[
                         MaterialButton(
-                          onPressed: () => print("SearchBarBtnPressed!"),
+                          onPressed: cleanup,
                           child: Icon(
                             Icons.dehaze,
                             size: 25.0,
@@ -379,7 +424,6 @@ class MapUiBodyState extends State<MapUiBody> {
                       child: InkWell(
                           onTap: () {
                             setState(() {
-                              mapScalingFactor = 0.6;
                               _readyToNavigate = !_readyToNavigate;
                               if(_readyToNavigate)
                                 navigateProcedure();
@@ -581,30 +625,6 @@ Future<void> getRiskScore(LatLng location) async {
     throw Exception('Failed to load post');
   }
 }
-
-//Future<DirectionResponse> getPathScore(DirectionResponse paths) async {
-//  var now = new DateTime.now();
-//  List<String> polyLineStrs = [];
-//  paths.routes.forEach((aRoute) => polyLineStrs.add(aRoute.polyLineStr));
-//  String req = jsonEncode({"hour": now.hour, "polyline": polyLineStrs});
-//  print(req);
-//  final response = await http.post(
-//      'https://saferoute-d749c.appspot.com//pathRiskScore',
-//      body: req,
-//      headers: {'Content-Type': 'application/json; charset=UTF-8'});
-//  if (response.statusCode == 200) {
-//    // If the call to the server was successful, parse the JSON
-//    var responseDecode = json.decode(response.body);
-//    assert(responseDecode['data'].length == paths.routes.length);
-//    for(int i = 0; i > paths.routes.length; i++) {
-//      paths.routes[i].score = responseDecode.data[i];
-//    }
-//    return paths;
-//  } else {
-//    // If that call was not successful, throw an error.
-//    throw Exception('Failed to load post');
-//  }
-//}
 
 Future<DirectionResponse> getPathScore() async {
   var now = new DateTime.now();
